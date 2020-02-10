@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 import torch.backends.cudnn
 import numpy as np
 
+global_step = 0
 
 def main(args):
 
@@ -45,6 +46,7 @@ def main(args):
             return iter(self.batch)
 
         def log_step(self):
+            global global_step
             self.batch_step += 1
             self.ll += loss.detach().item()
 
@@ -62,8 +64,9 @@ def main(args):
                 for p, t in zip(predicted, target):
                     self.confusion[p, t] += 1
 
-            writer.add_scalar(f'{id}_loss', loss.item(), global_step)
-            writer.add_scalar(f'{id}_accuracy', accuracy, global_step)
+            writer.add_scalar(f'{self.type}_loss', loss.item(), global_step)
+            writer.add_scalar(f'{self.type}_accuracy', accuracy, global_step)
+            global_step += 1
             return accuracy
 
 
@@ -94,7 +97,7 @@ def main(args):
     """ variables """
     run_dir = f'data/models/classifiers/{args.dataset_name}/{args.model_name}/run_{args.run_id}'
     writer = SummaryWriter(log_dir=run_dir)
-    global_step = 0
+    global_step = 0.0
     ave_precision = 0.0
     best_precision = 0.0
     train_accuracy = 0.0
