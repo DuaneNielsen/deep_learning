@@ -163,4 +163,5 @@ def main(args):
 if __name__ == '__main__':
     """  configuration """
     args = config.config()
+    torch.cuda.set_device(args.device)
     main(args)
