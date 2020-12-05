@@ -137,7 +137,7 @@ for example, to build vgg blocks...
 from models.mnn import make_layers
 from models.layerbuilder import LayerMetaData
 
-meta = LayerMetaData(input_shape=(32, 32))
+meta = LayerMetaData(input_shape=(3, 32, 32))
 
 encoder_core, meta = make_layers(['C:3', 64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'], type='vgg', meta=meta)
 
