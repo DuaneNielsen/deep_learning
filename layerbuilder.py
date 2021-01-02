@@ -55,17 +55,19 @@ def make_vgg_block(in_channels, v, input_shape=None, **kwargs):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, in_planes, planes, **kwargs):
+    def __init__(self, in_planes, planes, nonlinearity, **kwargs):
         super(ResnetBlock, self).__init__()
         self.p1 = nn.ReplicationPad2d(1)
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
+        self.nonlin1 = nonlinearity
         self.p2 = nn.ReplicationPad2d(1)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
+        self.nonlin2 = nonlinearity
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(self.p1(x))))
+        out = self.nonlin1(self.bn1(self.conv1(self.p1(x))))
         out = self.bn2(self.conv2(self.p2(out)))
 
         # pad the image if its size is not divisible by 2
@@ -81,8 +83,7 @@ class ResnetBlock(nn.Module):
         elif id.size(1) > out.size(1):
             id = torch.add(*id.chunk(2, dim=1)) / 2.0
 
-        out = F.relu(out + id)
-        return out
+        return self.nonlin2(out + id)
 
 
 def initialize_resnet_weights(f):
@@ -104,13 +105,14 @@ def make_resnet_block(in_channels, out_channels, input_shape=None, **kwargs):
 
 
 class FixupResLayer(nn.Module):
-    def __init__(self, in_layers, filters, stride=1):
+    def __init__(self, in_layers, filters, stride=1, nonlinearity=None):
         super().__init__()
         self.c1 = nn.Conv2d(in_layers, filters, 3, stride=stride, padding=1, bias=False)
-        #self.c1.weight.data.mul_(depth ** -0.5)
         self.c2 = nn.Conv2d(filters, filters, 3, stride=1, padding=1, bias=False)
         self.c2.weight.data.zero_()
         self.stride = stride
+        self.nonlin1 = nonlinearity
+        self.nonlin2 = nonlinearity
 
         self.gain = nn.Parameter(torch.ones(1))
         self.bias = nn.ParameterList([nn.Parameter(torch.zeros(1)) for _ in range(4)])
@@ -118,7 +120,7 @@ class FixupResLayer(nn.Module):
     def forward(self, input):
         hidden = input + self.bias[0]
         hidden = self.c1(hidden) + self.bias[1]
-        hidden = torch.relu(hidden) + self.bias[2]
+        hidden = self.nonlin1(hidden) + self.bias[2]
         hidden = self.c2(hidden) * self.gain + self.bias[3]
 
         # pad the image if its size is not divisible by 2
@@ -134,7 +136,7 @@ class FixupResLayer(nn.Module):
         elif id.size(1) > hidden.size(1):
             id = torch.add(*id.chunk(2, dim=1)) / 2.0
 
-        return torch.relu(hidden + id)
+        return self.nonlin2(hidden + id)
 
 
 def initialize_resnet_fixup_weights(f):
@@ -147,13 +149,18 @@ def initialize_resnet_fixup_weights(f):
             depth += 1
 
 
-def make_resnet_fixup_block(in_channels, out_channels, input_shape=None, **kwargs):
-    if 'stride' in kwargs:
-        stride = kwargs['stride']
+def get_arg(kwargs, arg, default=None):
+    if arg in kwargs:
+        return kwargs[arg]
     else:
-        stride = 1
+        return default
+
+
+def make_resnet_fixup_block(in_channels, out_channels, input_shape=None, **kwargs):
+    nonlin = get_arg(kwargs, 'nonlinearity', default=nn.ReLU(inplace=True))
+    stride = get_arg(kwargs, 'stride', default=1)
     layers = []
-    layers += [FixupResLayer(in_channels, out_channels, stride=stride)]
+    layers += [FixupResLayer(in_channels, out_channels, stride=stride, nonlinearity=nonlin)]
     if input_shape is not None:
         output_shape = out_channels, *conv_output_shape(input_shape[1:3], kernel_size=3, stride=stride, pad=1)
     else:
@@ -201,13 +208,21 @@ def make_layers(type, cfg, input_shape=None, nonlinearity=None, init_weights=Tru
     """
 
     :param type: the network type, can be 'fc', 'vgg', 'resnet-batchnorm', 'resnet-fixup'
-    :param cfg:
-    :param input_shape:
-    :param nonlinearity:
-    :param init_weights:
-    :param kwargs:
+    :param cfg: list of strings, each string is a token, can be..
+      B:<input_channels>:<output_channels>
+      C:<input_channels>:<output_channels>
+      M: Max pooling
+      U: Bilinear upsample
+    :param input_shape:  optional: (C, H, W) tuple indicating the data input shape
+    :param nonlinearity:  optional: nonlinearity to use in the network
+    :param init_weights:  optional: initialize the weights
+    :param kwargs:  kwargs specific for the block type
     :return:
+      backbone:  the network
+      shape: optional:  a list of [(C, H, W), (C, H, W) ... ] of the shapes activations at each block output, requires
+        input_shape to be set, or it will return a list of None
     """
+
     layers = []
     shapes = [input_shape]
     nonlinearity = nn.ReLU(inplace=True) if nonlinearity is None else nonlinearity
