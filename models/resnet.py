@@ -71,6 +71,10 @@ class StableBlock(nn.Module):
         if id.size(1) != out.size(1):
             id = torch.cat((id, id), dim=1)
 
+        # if less channels in next layer, then halve
+        elif id.size(1) > out.size(1):
+            id = torch.add(*id.chunk(2, dim=1)) / 2.0
+
         out = F.relu(out + id)
         return out
 

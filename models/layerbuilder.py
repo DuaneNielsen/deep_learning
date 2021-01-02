@@ -109,8 +109,12 @@ class ResnetBlock(nn.Module):
         id = avg_pool2d(x, 1, stride=1, padding=(padding_h, padding_w))
 
         # this assumes we are always doubling the amount of kernels as we go deeper
-        if id.size(1) != out.size(1):
+        if id.size(1) < out.size(1):
             id = torch.cat((id, id), dim=1)
+
+        # if less channels in next layer, then halve
+        elif id.size(1) > out.size(1):
+            id = torch.add(*id.chunk(2, dim=1)) / 2.0
 
         out = F.relu(out + id)
         return out
