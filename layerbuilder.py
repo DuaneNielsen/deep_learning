@@ -1,6 +1,5 @@
 import torch
 from torch import nn as nn
-import torch.nn.functional as F
 from torch.nn.functional import avg_pool2d
 
 
