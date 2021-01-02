@@ -69,7 +69,7 @@ get a training set of length 1000 and a test set of length 400
 
 ### Example config
 
-for training VGG16 on CIFAR 10 with a custom SGD schedule  
+for training resnet on CIFAR 10 with a custom SGD schedule  
 
 ```yaml
 batchsize: 128
