@@ -4,8 +4,9 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from colorama import Fore, Style
 import torch.nn as nn
-from models import mnn, autoencoder
-from models.layerbuilder import LayerMetaData, make_layers
+
+import models
+from layerbuilder import make_layers
 from utils.viewer import UniImageViewer, make_grid
 import datasets.package as package
 import config
@@ -72,11 +73,11 @@ def main(args):
     #encoder, meta = mnn.make_layers(args.model_encoder, type=args.model_type, meta=LayerMetaData(datapack.shape))
     #decoder, meta = mnn.make_layers(args.model_decoder, type=args.model_type, meta=meta)
 
-    encoder, shape = make_layers(cfg=args.model_encoder, network_type=args.model_type, input_shape=datapack.shape)
-    decoder, shape = make_layers(cfg=args.model_decoder, network_type=args.model_type, input_shape=shape[-1])
+    encoder, shape = make_layers(cfg=args.model_encoder, type=args.model_type, input_shape=datapack.shape)
+    decoder, shape = make_layers(cfg=args.model_decoder, type=args.model_type, input_shape=shape[-1])
 
 
-    auto_encoder = autoencoder.AutoEncoder(encoder, decoder).to(args.device)
+    auto_encoder = models.AutoEncoder(encoder, decoder).to(args.device)
     print(auto_encoder)
     augment = flatten if args.model_type == 'fc' else nop
     reverse_augment = reverse_flatten if args.model_type == 'fc' else nop

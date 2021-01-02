@@ -3,19 +3,19 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from colorama import Fore, Style
 import torch.nn as nn
-import models.classifier
+
+import models
 import config
 from datasets import package
 from tensorboardX import SummaryWriter
 import torch.backends.cudnn
 import numpy as np
-from models.layerbuilder import make_layers
+from layerbuilder import make_layers
 
 global_step = 0
 
 
 def main(args):
-
     def precision(confusion):
         correct = confusion * torch.eye(confusion.shape[0])
         incorrect = confusion - correct
@@ -69,7 +69,6 @@ def main(args):
             global_step += 1
             return accuracy
 
-
     def log_epoch(confusion, best_precision, test_accuracy, train_accuracy):
         precis, ave_precis = precision(confusion)
         print('')
@@ -116,8 +115,7 @@ def main(args):
     else:
         encoder, shapes = make_layers(args.model_type, args.model_encoder, datapack.shape)
 
-    classifier = models.classifier.Classifier(encoder, shapes[-1], num_classes=datapack.num_classes).to(args.device)
-    print(classifier)
+    classifier = models.Classifier(encoder, shapes[-1], num_classes=datapack.num_classes).to(args.device)
 
     if args.load is not None:
         classifier.load_state_dict(torch.load(args.load))

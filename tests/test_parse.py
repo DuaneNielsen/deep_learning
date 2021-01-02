@@ -1,5 +1,5 @@
 
-from models.layerbuilder import scan_token
+from layerbuilder import scan_token
 
 def equal(a, b):
     assert len(a) == len(b)

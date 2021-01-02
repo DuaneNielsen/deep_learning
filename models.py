@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn as nn
 
 
 class OutputBlock(nn.Module):
@@ -51,3 +51,15 @@ class Classifier(nn.Module):
     def forward(self, x):
         h = self.encoder(x)
         return self.output_block(h)
+
+
+class AutoEncoder(nn.Module):
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, x):
+        z = self.encoder(x)
+        x = self.decoder(z)
+        return z, x

@@ -76,12 +76,14 @@ batchsize: 128
 epochs: 350
 
 dataset:
-  name: cifar-10-normed
+  name: cifar-10
 
 model:
-  name: VGG16
-  type: conv
-  encoder: [3, 64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
+  name: RESNET12FIX
+  type: resnet-fixup
+  stride: 2
+  encoder: ['C:3:64', 'B:64:64', 'B:64:128', 'B:128:128', 'B:128:256',
+            'B:256:256', 'B:256:512', 'B:512:512']
 
 optim:
   class: SGD
@@ -129,24 +131,24 @@ If you get bored of typing the same NN blocks over and over, you can instead use
 
 It works similar to the Pytorch built-in layer builder, it can build
 
-fully connected: type = 'fc' vgg: type = 'vgg' or resnet: type = 'resnet'
+fully connected: type = 'fc' vgg: type = 'vgg' or resnet: type = 'resnet-batchnorm'
 
 for example, to build vgg blocks...
 
 ```python
-from models.mnn import make_layers
-from models.layerbuilder import LayerMetaData
+import layerbuilder
 
-meta = LayerMetaData(input_shape=(3, 32, 32))
+backbone, shape = layerbuilder.make_layers(
+    type='vgg',
+    cfg=['C:3:64', 'B:64:128', 'M', 'B:128:256', 'M', 'B:256:256', 'B:256:512', 'M', 
+         'B:512:512', 'B:512:512', 'M', 'B:512:512', 'B:512:512', 'M'])
 
-encoder_core, meta = make_layers(['C:3', 64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'], type='vgg', meta=meta)
-
-decoder_core, meta = make_layers([512, 512, 'U', 256, 256, 'U', 256, 256, 'U', 128, 'U', 64, 'U', 'C:3'], type='vgg', meta=meta)
 ```
 
+B -> Block of network_type
 M -> Max Pooling
 U -> Linear Upsample
-C:3 -> Conv layer with 3 channels
+C:3:64 -> Conv layer with 3 input channels and 64 output channels (3x3 stride 1) 
 
 ### Duplicating this project
 

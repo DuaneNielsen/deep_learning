@@ -4,41 +4,6 @@ import torch.nn.functional as F
 from torch.nn.functional import avg_pool2d
 
 
-def conv_output_shape(h_w, kernel_size=1, stride=1, pad=0, dilation=1):
-    """
-    Utility function for computing output of convolutions
-    takes a tuple of (h,w) and returns a tuple of (h,w)
-    """
-    from math import floor
-    if type(kernel_size) is int:
-        kernel_size = (kernel_size, kernel_size)
-    h = floor(((h_w[0] + (2 * pad) - (dilation * (kernel_size[0] - 1)) - 1) / stride) + 1)
-    w = floor(((h_w[1] + (2 * pad) - (dilation * (kernel_size[1] - 1)) - 1) / stride) + 1)
-    return h, w
-
-
-class LayerMetaData:
-    def __init__(self, input_shape):
-        self.shape = input_shape
-        self.depth = 1
-
-
-"""
-M -> MaxPooling
-L -> Capture Activations for Perceptual loss
-U -> Bilinear upsample
-"""
-
-
-def scan_token(token):
-    t = token.split(':')
-    if len(t) == 3:
-        return t[0], int(t[1]), int(t[2])
-    if len(t) == 1:
-        return t[0], None, None
-    raise Exception('Token format is either str, or str:int:int')
-
-
 def initialize_fc_weights(f):
     for m in f.modules():
         if isinstance(m, nn.Linear):
@@ -210,32 +175,47 @@ network_types = {
 }
 
 
-class LayerBuilder:
-    pass
+def conv_output_shape(h_w, kernel_size=1, stride=1, pad=0, dilation=1):
+    """
+    Utility function for computing output of convolutions
+    takes a tuple of (h,w) and returns a tuple of (h,w)
+    """
+    from math import floor
+    if type(kernel_size) is int:
+        kernel_size = (kernel_size, kernel_size)
+    h = floor(((h_w[0] + (2 * pad) - (dilation * (kernel_size[0] - 1)) - 1) / stride) + 1)
+    w = floor(((h_w[1] + (2 * pad) - (dilation * (kernel_size[1] - 1)) - 1) / stride) + 1)
+    return h, w
 
 
-def make_layers(network_type, cfg, input_shape=None, nonlinearity=None, init_weights=True, **kwargs):
+def scan_token(token):
+    t = token.split(':')
+    if len(t) == 3:
+        return t[0], int(t[1]), int(t[2])
+    if len(t) == 1:
+        return t[0], None, None
+    raise Exception('Token format is either str, or str:int:int')
+
+
+def make_layers(type, cfg, input_shape=None, nonlinearity=None, init_weights=True, **kwargs):
     """
 
-    :param cfg:  string in form
-    M -> Max pooling,
-    U -> UpsampleBilinear2d
-    C: -> 3x3 convolution, stride 1, padding 1, used to specify the input format...
-    for RGB image, use C:3, for greyscale use C:1
-
-    :param input_shape:  3 tuple (C, H, W) of input image
-    :param nonlinearity: nonlinearity to use as object, eg nn.SEUL(inplace=True)
-    :return: initialized nn.Module with network
+    :param type: the network type, can be 'fc', 'vgg', 'resnet-batchnorm', 'resnet-fixup'
+    :param cfg:
+    :param input_shape:
+    :param nonlinearity:
+    :param init_weights:
+    :param kwargs:
+    :return:
     """
-
     layers = []
     shapes = [input_shape]
     nonlinearity = nn.ReLU(inplace=True) if nonlinearity is None else nonlinearity
 
     for token in cfg:
-        tipe, in_channels, out_channels = scan_token(token)
+        block_type, in_channels, out_channels = scan_token(token)
 
-        if tipe == 'M':
+        if block_type == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
 
             if input_shape:  # compute output shape
@@ -243,22 +223,22 @@ def make_layers(network_type, cfg, input_shape=None, nonlinearity=None, init_wei
                 if min(*shapes[-1][1:3]) <= 0:
                     raise Exception('Image downsampled to 0 or less, use less downsampling')
 
-        elif tipe == 'U':
+        elif block_type == 'U':
             layers += [nn.UpsamplingBilinear2d(scale_factor=2)]
 
             if input_shape:  # compute output shape
                 shapes.append((shapes[-1][0], shapes[-1][1] * 2, shapes[-1][2] * 2))
 
-        elif tipe == 'C':
+        elif block_type == 'C':
             layers += [nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)]
             layers += [nonlinearity]
 
             if input_shape:  # compute output shape
                 shapes.append((out_channels, *conv_output_shape(shapes[-1][1:3], kernel_size=3, stride=1, pad=1)))
 
-        elif tipe == 'B':
-            block, output_shape = network_types[network_type].make_block(in_channels, out_channels, shapes[-1],
-                                                                         nonlinearity=nonlinearity, **kwargs)
+        elif block_type == 'B':
+            block, output_shape = network_types[type].make_block(in_channels, out_channels, shapes[-1],
+                                                                 nonlinearity=nonlinearity, **kwargs)
             layers += block
             if input_shape:
                 shapes.append(output_shape)
@@ -266,7 +246,7 @@ def make_layers(network_type, cfg, input_shape=None, nonlinearity=None, init_wei
     layer = nn.Sequential(*layers)
 
     if init_weights:
-        network_types[network_type].initialize_weights(layer)
+        network_types[type].initialize_weights(layer)
     return layer, shapes
 
 
