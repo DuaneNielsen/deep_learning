@@ -18,9 +18,13 @@ class VGGNetBuilder(LayerBuilder):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def make_block(self, in_channels, v):
+    def make_block(self, in_channels, v, input_shape=None):
         self.layers += [nn.ReplicationPad2d(1)]
         self.layers += [nn.Conv2d(in_channels, v, kernel_size=3)]
         self.layers += [nn.BatchNorm2d(v)]
         self.layers += [self.nonlinearity]
-        self.meta.shape = (v, self.meta.shape[1], self.meta.shape[2])
+        if input_shape:
+            output_shape = (v, input_shape[1], input_shape[2])
+        else:
+            output_shape = None
+        return output_shape

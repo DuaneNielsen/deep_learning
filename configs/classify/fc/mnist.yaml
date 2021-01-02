@@ -9,7 +9,7 @@ dataset:
 model:
   name: fc
   type: fc
-  encoder: [784, 2500, 2000, 1500, 1000, 500]
+  encoder: ['B:784:2500', 'B:2500:2000', 'B:2000:1500', 'B:1500:1000', 'B:1000:500', 'B:500:500']
 
 #optim:
 #  class: SGD

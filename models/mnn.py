@@ -1,6 +1,5 @@
 import torch
 from torch import nn as nn
-from models.layerbuilder import FCBuilder, LayerMetaData
 from models.resnet import ResNetBuilder, ResNetFixupBuilder, StableResNetBuilder, ConstResNetFixupBuilder
 from models.vgg import VGGNetBuilder
 
@@ -32,7 +31,6 @@ def parameter_count(module):
 
 
 builders = {'vgg16': VGGNetBuilder(),
-            'fc': FCBuilder(),
             'resnet-batchnorm': StableResNetBuilder(),
             'resnet-fixup': ResNetFixupBuilder(),
             'resnet-fixup-const': ConstResNetFixupBuilder(),

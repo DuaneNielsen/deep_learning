@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.layerbuilder import LayerBuilder, conv_output_shape
 from torch.nn.functional import avg_pool2d
-
+from models.layerbuilder import LayerBuilder, conv_output_shape
 
 class BasicBlock(nn.Module):
     def __init__(self, in_planes, planes, stride=1):
@@ -87,24 +86,21 @@ class StableResNetBuilder(LayerBuilder):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def make_block(self, in_channels, v):
-        if self.meta.depth == 1:
-            self.layers += [nn.Conv2d(in_channels, v, kernel_size=3, stride=1, padding=1, bias=False)]
-            self.layers += [nn.BatchNorm2d(v)]
-            self.layers += [self.nonlinearity]
-            self.meta.depth += 1
-            self.meta.shape = v, *conv_output_shape(self.meta.shape[1:3], kernel_size=3, stride=1, pad=1)
+    def make_block(self, in_channels, out_channels, input_shape=None):
+        self.layers += [StableBlock(in_channels, out_channels)]
+
+        if input_shape:
+            output_shape = (out_channels, *conv_output_shape(input_shape[1:3], kernel_size=3, stride=1, pad=1))
         else:
-            self.layers += [StableBlock(in_channels, v)]
-            self.meta.shape = v, *conv_output_shape(self.meta.shape[1:3], kernel_size=3, stride=1, pad=1)
-            self.meta.depth += 1
+            output_shape = None
+        return output_shape
 
 
 class FixupResLayer(nn.Module):
-    def __init__(self, depth, in_layers, filters, stride=1):
+    def __init__(self, in_layers, filters, stride=1):
         super().__init__()
         self.c1 = nn.Conv2d(in_layers, filters, 3, stride=stride, padding=1, bias=False)
-        self.c1.weight.data.mul_(depth ** -0.5)
+        #self.c1.weight.data.mul_(depth ** -0.5)
         self.c2 = nn.Conv2d(filters, filters, 3, stride=1, padding=1, bias=False)
         self.c2.weight.data.zero_()
         self.stride = stride
@@ -128,7 +124,7 @@ class FixupResLayer(nn.Module):
             id = torch.cat((id, id), dim=1)
 
         # if less channels in next layer, then halve
-        if id.size(1) > hidden.size(1):
+        elif id.size(1) > hidden.size(1):
             id = torch.add(*id.chunk(2, dim=1)) / 2.0
 
         return torch.relu(hidden + id)
@@ -145,71 +141,41 @@ class ResNetFixupBuilder(LayerBuilder):
 
     @staticmethod
     def initialize_weights(f):
-        """  Null init, blocks init themselves"""
-        pass
+        depth = 1
+        for module in f:
+            if isinstance(module, nn.Conv2d):
+                depth += 1
+            if isinstance(module, FixupResLayer):
+                module.c1.weight.data.mul_(depth ** -0.5)
+                depth += 1
 
-    def make_block(self, in_channels, v):
-        if self.meta.depth == 1:
-            self.layers += [nn.Conv2d(in_channels, v, kernel_size=3, bias=False)]
-            self.layers += [self.nonlinearity]
-            self.meta.depth += 1
-            self.meta.shape = v, *conv_output_shape(self.meta.shape[1:3], kernel_size=3, stride=3)
+    def make_block(self, in_channels, out_channels, input_shape=None):
+        self.layers += [FixupResLayer(in_channels, out_channels, stride=2)]
+        if input_shape is not None:
+            output_shape = out_channels, *conv_output_shape(input_shape[1:3], kernel_size=3, stride=2, pad=1)
         else:
-            self.layers += [FixupResLayer(self.meta.depth, in_channels, v, stride=2)]
-            self.meta.depth += 1
-            self.meta.shape = v, *conv_output_shape(self.meta.shape[1:3], kernel_size=3, stride=2, pad=1)
-
-
-class ConstFixupResLayer(nn.Module):
-    def __init__(self, depth, in_layers, filters, stride=1):
-        """ Same HW out as in"""
-        super().__init__()
-        self.c1 = nn.Conv2d(in_layers, filters, 3, stride=stride, padding=1, bias=False)
-        self.c1.weight.data.mul_(depth ** -0.5)
-        self.c2 = nn.Conv2d(filters, filters, 3, stride=1, padding=1, bias=False)
-        self.c2.weight.data.zero_()
-        self.stride = stride
-        self.gain = nn.Parameter(torch.ones(1))
-        self.bias = nn.ParameterList([nn.Parameter(torch.zeros(1)) for _ in range(4)])
-
-    def forward(self, input):
-        hidden = input + self.bias[0]
-        hidden = self.c1(hidden) + self.bias[1]
-        hidden = torch.relu(hidden) + self.bias[2]
-        hidden = self.c2(hidden) * self.gain + self.bias[3]
-
-        # pad the image if its size is not divisible by 2
-        padding_h = 0 if input.size(2) % 2 == 0 else 1
-        padding_w = 0 if input.size(3) % 2 == 0 else 1
-        id = avg_pool2d(input, self.stride, stride=self.stride, padding=(padding_h, padding_w))
-
-        # this assumes we are always doubling the amount of kernels as we go deeper
-        if id.size(1) != hidden.size(1):
-            id = torch.cat((id, id), dim=1)
-        return torch.relu(hidden + id)
+            output_shape = None
+        return output_shape
 
 
 class ConstResNetFixupBuilder(LayerBuilder):
-    """
-    Note that this assumes the inputs are normalized.  If you use the output of a Fixup network
-    directly into another fixup, you will have to carry the depth over.
-
-    """
     def __init__(self):
         super().__init__()
 
     @staticmethod
     def initialize_weights(f):
-        """  Null init, blocks init themselves"""
-        pass
+        depth = 1
+        for module in f:
+            if isinstance(module, nn.Conv2d):
+                depth += 1
+            if isinstance(module, FixupResLayer):
+                module.c1.weight.data.mul_(depth ** -0.5)
+                depth += 1
 
-    def make_block(self, in_channels, v):
-        if self.meta.depth == 1:
-            self.layers += [nn.Conv2d(in_channels, v, kernel_size=3, stride=1, padding=1, bias=False)]
-            self.layers += [self.nonlinearity]
-            self.meta.depth += 1
-            self.meta.shape = v, *conv_output_shape(self.meta.shape[1:3], kernel_size=3, stride=1, pad=1)
+    def make_block(self, in_channels, out_channels, input_shape=None):
+        self.layers += [FixupResLayer(in_channels, out_channels, stride=1)]
+        if input_shape is not None:
+            output_shape = out_channels, *conv_output_shape(input_shape[1:3], kernel_size=3, stride=1, pad=1)
         else:
-            self.layers += [FixupResLayer(self.meta.depth, in_channels, v, stride=1)]
-            self.meta.depth += 1
-            self.meta.shape = v, *conv_output_shape(self.meta.shape[1:3], kernel_size=3, stride=1, pad=1)
+            output_shape = None
+        return output_shape

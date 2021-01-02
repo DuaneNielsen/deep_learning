@@ -4,15 +4,15 @@ from tqdm import tqdm
 from colorama import Fore, Style
 import torch.nn as nn
 import models.classifier
-from models import mnn
-from models.layerbuilder import LayerMetaData
 import config
 from datasets import package
 from tensorboardX import SummaryWriter
 import torch.backends.cudnn
 import numpy as np
+from models.layerbuilder import make_layers
 
 global_step = 0
+
 
 def main(args):
 
@@ -111,8 +111,12 @@ def main(args):
     augment = flatten if args.model_type == 'fc' else nop
 
     """ model """
-    encoder, meta = mnn.make_layers(args.model_encoder, args.model_type, LayerMetaData(datapack.shape))
-    classifier = models.classifier.Classifier(encoder, meta, num_classes=datapack.num_classes).to(args.device)
+    if 'model_stride' in args:
+        encoder, shapes = make_layers(args.model_type, args.model_encoder, datapack.shape, stride=args.model_stride)
+    else:
+        encoder, shapes = make_layers(args.model_type, args.model_encoder, datapack.shape)
+
+    classifier = models.classifier.Classifier(encoder, shapes[-1], num_classes=datapack.num_classes).to(args.device)
     print(classifier)
 
     if args.load is not None:
