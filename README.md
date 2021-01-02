@@ -79,11 +79,11 @@ dataset:
   name: cifar-10
 
 model:
-  name: RESNET12FIX
+  name: RESNET12
   type: resnet-fixup
-  stride: 2
-  encoder: ['C:3:64', 'B:64:64', 'B:64:128', 'B:128:128', 'B:128:256',
-            'B:256:256', 'B:256:512', 'B:512:512']
+  stride: 1
+  encoder: ['C:3:64', 'B:64:64', 'B:64:64', 'M', 'B:64:128', 'M', 'B:128:256', 'B:256:256', 'M', 'B:256:512', 
+            'B:512:512','M', 'B:512:512', 'B:512:512', 'M']
 
 optim:
   class: SGD
